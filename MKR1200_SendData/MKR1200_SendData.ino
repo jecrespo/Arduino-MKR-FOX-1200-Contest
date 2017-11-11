@@ -1,6 +1,8 @@
 #include <SigFox.h>
 #include <ArduinoLowPower.h>
 #include <Timer.h>
+#include <Adafruit_HMC5883_U.h>
+#include <Adafruit_ADXL345_U.h>
 
 // Set debug to false to enable continuous mode
 // and disable serial prints
