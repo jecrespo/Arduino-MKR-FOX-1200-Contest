@@ -14,12 +14,14 @@ Timer t;
 Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(1);
 Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(2);
 
+float roll, pitch, heading; //X, Y, Z  -- https://support.pcigeomatics.com/hc/en-us/article_attachments/201813485/image005.png
+
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
 
   if (debug == true) {
 
-    Serial.begin(9600);
+    Serial.begin(115200);
     while (!Serial) {}
   }
 
@@ -54,7 +56,7 @@ void setup() {
     while (1);
   }
 
-  t.every(600000, takeReading);
+  t.every(30000, takeReading);
   //t.every(5000, readSensors);
 }
 
@@ -80,8 +82,9 @@ void takeReading() {
   }
   delay(100);
 
-  // 3 bytes (ALM) + 8 bytes (ID as String) + 1 byte (source) < 12 bytes
-  String to_be_sent = "ALM" + SigFox.ID() +  "1";
+  // D + roll (3 bytes) + # + pitch (3 bytes) + # +heading (3 bytes) = 12 bytes
+  String to_be_sent = "D" + String(int(roll)) + "#" + String(int(pitch)) +  "#" + String(int(heading));
+  //Serial.println(to_be_sent);
 
   SigFox.beginPacket();
   SigFox.print(to_be_sent);
@@ -115,6 +118,18 @@ void readSensors () {
   Serial.print("Y: "); Serial.print(event_accel.acceleration.y); Serial.print("  ");
   Serial.print("Z: "); Serial.print(event_accel.acceleration.z); Serial.print("  "); Serial.println("m/s^2 ");
 
+  float anguloX = atan(event_accel.acceleration.y / sqrt((event_accel.acceleration.x * event_accel.acceleration.x) + (event_accel.acceleration.z * event_accel.acceleration.z))); //En radianes
+  roll = anguloX * 180 / M_PI;
+  Serial.print("Angle X: "); Serial.print(" ");
+  Serial.print(roll); Serial.println(" grades");
+
+  float anguloY = atan(event_accel.acceleration.x / sqrt((event_accel.acceleration.y * event_accel.acceleration.y) + (event_accel.acceleration.z * event_accel.acceleration.z))); //En radianes
+  pitch = anguloY * 180 / M_PI;
+  Serial.print("Angle Y: "); Serial.print(" ");
+  Serial.print(pitch); Serial.println(" grades");
+
+  Serial.println("-----------------------------------");
+
   /* Display the results (magnetic vector values are in micro-Tesla (uT)) */
   Serial.print("X: "); Serial.print(event_mag.magnetic.x); Serial.print("  ");
   Serial.print("Y: "); Serial.print(event_mag.magnetic.y); Serial.print("  ");
@@ -122,7 +137,7 @@ void readSensors () {
 
   // Hold the module so that Z is pointing 'up' and you can measure the heading with x&y
   // Calculate heading when the magnetometer is level, then correct for signs of axis.
-  float heading = atan2(event_mag.magnetic.y, event_mag.magnetic.x);
+  heading = atan2(event_mag.magnetic.y, event_mag.magnetic.x);
 
   // Once you have your heading, you must then add your 'Declination Angle', which is the 'Error' of the magnetic field in your location.
   // Find yours here: http://www.magnetic-declination.com/
@@ -143,5 +158,7 @@ void readSensors () {
   float headingDegrees = heading * 180 / M_PI;
 
   Serial.print("Heading (degrees): "); Serial.println(headingDegrees);
+  Serial.println("-----------------------------------");
+  Serial.println("-----------------------------------");
 }
 
