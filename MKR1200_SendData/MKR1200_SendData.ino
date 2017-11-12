@@ -6,7 +6,7 @@
 
 // Set debug to false to enable continuous mode
 // and disable serial prints
-int debug = true;
+int debug = false;
 
 Timer t;
 
@@ -56,8 +56,8 @@ void setup() {
     while (1);
   }
 
-  t.every(30000, takeReading);
-  t.every(5000, readSensors);
+  t.every(600000, takeReading);
+  t.every(30000, readSensors);
 }
 
 void loop()
