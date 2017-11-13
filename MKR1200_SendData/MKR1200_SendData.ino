@@ -65,8 +65,14 @@ void setup() {
     while (1);
   }
 
-  t.every(UPDATE_SIGFOX_TIME, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
-  t.every(SENSOR_READING_TIME, readSensors);  //Read sensor to check if bike has fallen
+  if (debug == true) {
+    t.every(UPDATE_SIGFOX_TIME/10, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
+    t.every(SENSOR_READING_TIME/10, readSensors);  //Read sensor to check if bike has fallen
+  }
+  else {
+    t.every(UPDATE_SIGFOX_TIME, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
+    t.every(SENSOR_READING_TIME, readSensors);  //Read sensor to check if bike has fallen
+  }
 }
 
 void loop()
@@ -82,13 +88,15 @@ void reboot() {
 void updateState() {  //Send axis inclination to sigfox
   SigFox.begin();
 
+  delay(100);
+
   if (debug == true) {
     Serial.print("Send Data: ");
   }
   delay(100);
 
   // Data snet to sigfox platform
-  // D + roll (3 bytes) + # + pitch (3 bytes) + # +heading (3 bytes) = 12 bytes
+  // D (data) + roll (3 bytes) + # + pitch (3 bytes) + # +heading (3 bytes) = 12 bytes
   String to_be_sent = "D" + String(int(roll)) + "#" + String(int(pitch)) +  "#" + String(int(headingDegrees));
   if (debug == true) {
     Serial.println(to_be_sent);
@@ -192,17 +200,51 @@ void readSensors () { //read sensors and check bike state
     if (fallen == true) {
       fallen = false;
       t.stop(led_event);
+      t.stop(fallen_event);
+      digitalWrite(LED_BUILTIN,LOW);  //in case timer stopped and led on
     }
   }
 
   if ((fallen_counter > NUMBER_READINGS) && (fallen == false)) {
     fallen = true;
-    sendAlarm();
+    led_event = t.oscillate(LED_BUILTIN, 1000, HIGH); //blink builtin led with new timer
+    fallen_event = t.every(300000, sendAlarm, 3); //repeat 3 times send alarm every 5 minutes
   }
 }
 
 void  sendAlarm() {
-  //send alarm to sigfox and blink builtin led with new timer
-  led_event = t.oscillate(LED_BUILTIN, 1000, HIGH);
-}
+  //send alarm to sigfox
 
+  SigFox.begin();
+
+  if (debug == true) {
+    Serial.print("Alarm event on sensor: ");
+  }
+  delay(100);
+
+  // A (alarm) + roll (3 bytes) + # + pitch (3 bytes) + # +heading (3 bytes) = 12 bytes
+  String to_be_sent = "A" + String(int(roll)) + "#" + String(int(pitch)) +  "#" + String(int(headingDegrees));
+  if (debug == true) {
+    Serial.println(to_be_sent);
+  }
+
+  SigFox.beginPacket();
+  SigFox.print(to_be_sent);
+  int ret = SigFox.endPacket();
+
+  if (debug == true) {
+    Serial.println(SigFox.status(SIGFOX));
+    Serial.println(SigFox.status(ATMEL));
+  }
+
+  // shut down module, back to standby
+  SigFox.end();
+
+  if (debug == true) {
+    if (ret > 0) {
+      Serial.println("No transmission");
+    } else {
+      Serial.println("Transmission ok");
+    }
+  }
+}
