@@ -1,12 +1,21 @@
 #include <SigFox.h>
 #include <ArduinoLowPower.h>
-#include <Timer.h>
+#include <Timer.h>  //https://github.com/JChristensen/Timer
 #include <Adafruit_HMC5883_U.h>
 #include <Adafruit_ADXL345_U.h>
+
+#define NUMBER_READINGS 3 //When you get 3 sensor readings with bike fallen, send alert.
+#define SENSOR_READING_TIME 10000
+#define UPDATE_SIGFOX_TIME 600000
 
 // Set debug to false to enable continuous mode
 // and disable serial prints
 int debug = false;
+
+boolean fallen = false;
+int fallen_counter = 0; //counter number falling readings
+int fallen_event;
+int led_event;
 
 Timer t;
 
@@ -23,8 +32,7 @@ void setup() {
 
     Serial.begin(115200);
     Serial.println("Starting....");
-    delay(2000);
-    //while (!Serial) {}
+    while (!Serial) {}
   }
 
   if (!SigFox.begin()) {
@@ -44,7 +52,7 @@ void setup() {
   {
     /* There was a problem detecting the ADXL345 ... check your connections */
     Serial.println("Ooops, no ADXL345 detected ... Check your wiring!");
-    digitalWrite(LED_BUILTIN, HIGH);
+    digitalWrite(LED_BUILTIN, HIGH);  //light on builtin led if a problem is detected
     while (1);
   }
   accel.setRange(ADXL345_RANGE_16_G);
@@ -53,11 +61,12 @@ void setup() {
   {
     /* There was a problem detecting the HMC5883 ... check your connections */
     Serial.println("Ooops, no HMC5883 detected ... Check your wiring!");
+    digitalWrite(LED_BUILTIN, HIGH);  //light on builtin led if a problem is detected
     while (1);
   }
 
-  t.every(600000, takeReading);
-  t.every(30000, readSensors);
+  t.every(UPDATE_SIGFOX_TIME, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
+  t.every(SENSOR_READING_TIME, readSensors);  //Read sensor to check if bike has fallen
 }
 
 void loop()
@@ -70,9 +79,7 @@ void reboot() {
   while (1);
 }
 
-void takeReading() {
-  // if we get here it means that an event was received
-
+void updateState() {  //Send axis inclination to sigfox
   SigFox.begin();
 
   if (debug == true) {
@@ -80,6 +87,7 @@ void takeReading() {
   }
   delay(100);
 
+  // Data snet to sigfox platform
   // D + roll (3 bytes) + # + pitch (3 bytes) + # +heading (3 bytes) = 12 bytes
   String to_be_sent = "D" + String(int(roll)) + "#" + String(int(pitch)) +  "#" + String(int(headingDegrees));
   if (debug == true) {
@@ -107,7 +115,7 @@ void takeReading() {
   }
 }
 
-void readSensors () {
+void readSensors () { //read sensors and check bike state
   /* Get a new sensor event */
   sensors_event_t event_accel;
   accel.getEvent(&event_accel);
@@ -170,5 +178,31 @@ void readSensors () {
     Serial.println("-----------------------------------");
     Serial.println("-----------------------------------");
   }
+
+  //Checks if bike is straight or fallen
+  //Due to IMU position stright state: roll (x) == 90 && pitch (y) == 0
+  //Fallen state: (roll (x) < 30 || roll (x) > 150) || (pitch (y) > 60|| pitch (y) < -60)
+  //heading (z) only direcction
+
+  if (((roll < 30) || (roll > 150)) || ((pitch > 60) || (pitch < -60))) {
+    fallen_counter++;
+  }
+  else {
+    fallen_counter = 0; //reset counter
+    if (fallen == true) {
+      fallen = false;
+      t.stop(led_event);
+    }
+  }
+
+  if ((fallen_counter > NUMBER_READINGS) && (fallen == false)) {
+    fallen = true;
+    sendAlarm();
+  }
+}
+
+void  sendAlarm() {
+  //send alarm to sigfox and blink builtin led with new timer
+  led_event = t.oscillate(LED_BUILTIN, 1000, HIGH);
 }
 
