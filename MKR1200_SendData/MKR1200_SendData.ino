@@ -65,9 +65,13 @@ void setup() {
     while (1);
   }
 
+  //Initialitation
+  updateState();
+  readSensors();
+
   if (debug == true) {
-    t.every(UPDATE_SIGFOX_TIME/10, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
-    t.every(SENSOR_READING_TIME/10, readSensors);  //Read sensor to check if bike has fallen
+    t.every(UPDATE_SIGFOX_TIME / 10, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
+    t.every(SENSOR_READING_TIME / 10, readSensors); //Read sensor to check if bike has fallen
   }
   else {
     t.every(UPDATE_SIGFOX_TIME, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
@@ -201,7 +205,7 @@ void readSensors () { //read sensors and check bike state
       fallen = false;
       t.stop(led_event);
       t.stop(fallen_event);
-      digitalWrite(LED_BUILTIN,LOW);  //in case timer stopped and led on
+      digitalWrite(LED_BUILTIN, LOW); //in case timer stopped and led on
     }
   }
 
