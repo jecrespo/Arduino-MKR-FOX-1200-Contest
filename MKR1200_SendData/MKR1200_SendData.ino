@@ -66,8 +66,8 @@ void setup() {
   }
 
   //Initialitation
-  updateState();
   readSensors();
+  updateState();
 
   if (debug == true) {
     t.every(UPDATE_SIGFOX_TIME / 10, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
