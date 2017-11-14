@@ -3,10 +3,14 @@
 #include <Timer.h>  //https://github.com/JChristensen/Timer
 #include <Adafruit_HMC5883_U.h>
 #include <Adafruit_ADXL345_U.h>
+#include <Adafruit_GPS.h>
 
 #define NUMBER_READINGS 3 //When you get 3 sensor readings with bike fallen, send alert.
 #define SENSOR_READING_TIME 10000
 #define UPDATE_SIGFOX_TIME 600000
+
+// what's the name of the hardware serial port?
+#define GPSSerial Serial1
 
 // Set debug to false to enable continuous mode
 // and disable serial prints
@@ -23,17 +27,29 @@ Timer t;
 Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(1);
 Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(2);
 
+// Connect to the GPS on the hardware port
+Adafruit_GPS GPS(&GPSSerial);
+
+// Set GPSECHO to 'false' to turn off echoing the GPS data to the Serial console
+// Set to 'true' if you want to debug and listen to the raw GPS sentences
+#define GPSECHO false
+
 float roll, pitch, headingDegrees; //X, Y, Z  -- https://support.pcigeomatics.com/hc/en-us/article_attachments/201813485/image005.png
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
 
   if (debug == true) {
-
-    Serial.begin(115200);
+    Serial.begin(115200); //for debug purpose
     Serial.println("Starting....");
     while (!Serial) {}
   }
+
+  // 9600 NMEA is the default baud rate for Adafruit MTK GPS's- some use 4800
+  GPS.begin(9600);
+  //turn on only the "minimum recommended" data
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
 
   if (!SigFox.begin()) {
     //something is really wrong, try rebooting
@@ -66,8 +82,8 @@ void setup() {
   }
 
   if (debug == true) {
-    t.every(UPDATE_SIGFOX_TIME/10, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
-    t.every(SENSOR_READING_TIME/10, readSensors);  //Read sensor to check if bike has fallen
+    t.every(UPDATE_SIGFOX_TIME / 10, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
+    t.every(SENSOR_READING_TIME / 10, readSensors); //Read sensor to check if bike has fallen
   }
   else {
     t.every(UPDATE_SIGFOX_TIME, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
@@ -201,7 +217,7 @@ void readSensors () { //read sensors and check bike state
       fallen = false;
       t.stop(led_event);
       t.stop(fallen_event);
-      digitalWrite(LED_BUILTIN,LOW);  //in case timer stopped and led on
+      digitalWrite(LED_BUILTIN, LOW); //in case timer stopped and led on
     }
   }
 
@@ -222,8 +238,29 @@ void  sendAlarm() {
   }
   delay(100);
 
+  //GPS Request
+  if (GPS.newNMEAreceived()) {
+    GPS.lastNMEA(); // this also sets the newNMEAreceived() flag to false
+    GPS.parse(GPS.lastNMEA()); // this also sets the newNMEAreceived() flag to false
+  }
+
+  if (GPS.fix) {
+    if (debug == true) {
+      Serial.print("Location: ");
+      Serial.print(GPS.latitude, 4); Serial.print(GPS.lat);
+      Serial.print(", ");
+      Serial.print(GPS.longitude, 4); Serial.println(GPS.lon);
+    }
+  }
+
   // A (alarm) + roll (3 bytes) + # + pitch (3 bytes) + # +heading (3 bytes) = 12 bytes
-  String to_be_sent = "A" + String(int(roll)) + "#" + String(int(pitch)) +  "#" + String(int(headingDegrees));
+  //uncomment this line to send IMU data
+  //String to_be_sent = "A" + String(int(roll)) + "#" + String(int(pitch)) +  "#" + String(int(headingDegrees));
+
+  // P (Position) + latitude + # + longitude < 12 bytes
+  //use this line to send GPS position
+  String to_be_sent = "P" + String(GPS.latitude) + "#" + String(GPS.longitude);
+
   if (debug == true) {
     Serial.println(to_be_sent);
   }
