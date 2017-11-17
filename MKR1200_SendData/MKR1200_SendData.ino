@@ -14,7 +14,8 @@
 
 // Set debug to false to enable continuous mode
 // and disable serial prints
-int debug = false;
+int debug = true;
+int gps = false;
 
 boolean fallen = false;
 int fallen_counter = 0; //counter number falling readings
@@ -42,14 +43,17 @@ void setup() {
   if (debug == true) {
     Serial.begin(115200); //for debug purpose
     Serial.println("Starting....");
-    while (!Serial) {}
+    delay(5000);
+    //while (!Serial) {}
   }
 
-  // 9600 NMEA is the default baud rate for Adafruit MTK GPS's- some use 4800
-  GPS.begin(9600);
-  //turn on only the "minimum recommended" data
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
+  if (debug == true) {
+    // 9600 NMEA is the default baud rate for Adafruit MTK GPS's- some use 4800
+    GPS.begin(9600);
+    //turn on only the "minimum recommended" data
+    GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
+    GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
+  }
 
   if (!SigFox.begin()) {
     //something is really wrong, try rebooting
@@ -86,8 +90,10 @@ void setup() {
   updateState();
 
   if (debug == true) {
-    t.every(UPDATE_SIGFOX_TIME / 10, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
-    t.every(SENSOR_READING_TIME / 10, readSensors); //Read sensor to check if bike has fallen
+    //t.every(UPDATE_SIGFOX_TIME / 10, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
+    //t.every(SENSOR_READING_TIME / 10, readSensors); //Read sensor to check if bike has fallen
+    t.every(UPDATE_SIGFOX_TIME, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
+    t.every(SENSOR_READING_TIME, readSensors); //Read sensor to check if bike has fallen
   }
   else {
     t.every(UPDATE_SIGFOX_TIME, updateState); //Send data to update state to sigfox platform. Like a "keepalive"
@@ -234,7 +240,7 @@ void readSensors () { //read sensors and check bike state
 
 void  sendAlarm() {
   //send alarm to sigfox
-
+  String to_be_sent = "";
   SigFox.begin();
 
   if (debug == true) {
@@ -242,28 +248,32 @@ void  sendAlarm() {
   }
   delay(100);
 
-  //GPS Request
-  if (GPS.newNMEAreceived()) {
-    GPS.lastNMEA(); // this also sets the newNMEAreceived() flag to false
-    GPS.parse(GPS.lastNMEA()); // this also sets the newNMEAreceived() flag to false
-  }
+  if (gps == true) {
+    //GPS Request
+    if (GPS.newNMEAreceived()) {
+      GPS.lastNMEA(); // this also sets the newNMEAreceived() flag to false
+      GPS.parse(GPS.lastNMEA()); // this also sets the newNMEAreceived() flag to false
+    }
 
-  if (GPS.fix) {
-    if (debug == true) {
-      Serial.print("Location: ");
-      Serial.print(GPS.latitude, 4); Serial.print(GPS.lat);
-      Serial.print(", ");
-      Serial.print(GPS.longitude, 4); Serial.println(GPS.lon);
+    if (GPS.fix) {
+      if (debug == true) {
+        Serial.print("Location: ");
+        Serial.print(GPS.latitude, 4); Serial.print(GPS.lat);
+        Serial.print(", ");
+        Serial.print(GPS.longitude, 4); Serial.println(GPS.lon);
+      }
     }
   }
 
-  // A (alarm) + roll (3 bytes) + # + pitch (3 bytes) + # +heading (3 bytes) = 12 bytes
-  //uncomment this line to send IMU data
-  //String to_be_sent = "A" + String(int(roll)) + "#" + String(int(pitch)) +  "#" + String(int(headingDegrees));
-
-  // P (Position) + latitude + # + longitude < 12 bytes
-  //use this line to send GPS position
-  String to_be_sent = "P" + String(GPS.latitude) + "#" + String(GPS.longitude);
+  if (gps == true) {
+    // P (Position) + latitude + # + longitude < 12 bytes
+    //use this line to send GPS position
+    to_be_sent = "P" + String(GPS.latitude) + "#" + String(GPS.longitude);
+  }
+  else {
+    // A (alarm) + roll (3 bytes) + # + pitch (3 bytes) + # +heading (3 bytes) = 12 bytes
+    to_be_sent = "A" + String(int(roll)) + "#" + String(int(pitch)) +  "#" + String(int(headingDegrees));
+  }
 
   if (debug == true) {
     Serial.println(to_be_sent);
